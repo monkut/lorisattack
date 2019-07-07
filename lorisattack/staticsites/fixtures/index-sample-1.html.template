@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="ja-jp">
+<head prefix="og: http://ogp.me/ns# fb: http://ogp.me/ns/fb# article: http://ogp.me/ns/article#">
+	<!-- Global site tag (gtag.js) - Google Analytics -->
+	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-124841910-1"></script>
+	<script>
+	  window.dataLayer = window.dataLayer || [];
+	  function gtag(){dataLayer.push(arguments);}
+	  gtag('js', new Date());
+
+	  gtag('config', 'UA-124841910-1');
+	</script>
+
+	<title>KICONIA WORKS</title>
+
+	<!-- framework css -->
+	<link rel="stylesheet" href="stylesheets/plugins/bootstrap3.min.css">
+	<!-- plugins css -->
+	<link rel="stylesheet" href="stylesheets/plugins/drawer.min.css">
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.5.2/animate.min.css">
+	<!-- common css -->
+	<link rel="stylesheet" href="stylesheets/style.css">
+	<!-- font css -->
+	<link href="https://fonts.googleapis.com/css?family=Hind:300,400,600,700" rel="stylesheet">
+</head>
+
+<body class="drawer drawer--right">
+
+<ul>
+    {% for news_item in news_items %}
+        <li>{{ news_item }}</li>
+    {% endfor %}
+</ul>
+
+</body>
+</html>
