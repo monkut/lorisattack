@@ -65,10 +65,16 @@ class StaticSiteFunctionsTestCase(TestCase):
             self.indexpage.save()
 
     def test_functions_instantiate_staticsite(self):
+        expected_relfilepaths = [
+            self.indexpage.relative_filepath,
+        ]
         site_prefix = 'sometestprefix-'
         with TemporaryDirectory(prefix=site_prefix) as tempdir:
-            instantiate_staticsite(
+            instantiated_page_data = instantiate_staticsite(
                 self.staticsite,
                 Path(tempdir)
             )
             self.assertTrue(os.listdir(tempdir))
+
+            expected_absolute_filepath = Path(tempdir) / self.indexpage.relative_filepath
+            self.assertTrue(expected_absolute_filepath.exists(), f'Expected Filepath Not found: {expected_absolute_filepath}')

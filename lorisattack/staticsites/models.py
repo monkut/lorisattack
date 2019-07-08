@@ -1,7 +1,6 @@
-import os
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Generator, Tuple
 from tempfile import TemporaryDirectory
 
 from django.db import models
@@ -24,7 +23,6 @@ S3_CLIENT = boto3.client(
     's3',
     endpoint_url=settings.BOTO3_ENDPOINTS['s3']
 )
-MAX_INDEX_NEWSITEMS = int(os.getenv('MAX_INDEX_NEWSITEMS', '6'))
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +111,7 @@ PAGE_TYPE_CHOICES = (
 
 
 class StaticPageBase(UserCreatedDatetimeModel):
-    site = models.OneToOneField(
+    site = models.ForeignKey(
         StaticSite,
         on_delete=models.CASCADE,
     )
@@ -136,10 +134,24 @@ class StaticPageBase(UserCreatedDatetimeModel):
         help_text=_('Index template (in django template language format)')
     )
 
-    def prepare_assets(self, target_root_directory: Path):
+    @property
+    def relative_filepath(self) -> Path:
+        return Path(str(self.relative_path), str(self.filename))
+
+    def prepare_assets(self, target_root_directory: Path) -> Generator[Tuple[Path, Path], None, None]:
         for asset in PageAsset.objects.filter(page=self):
-            logger.info(f'Writing PageAsset({asset.relative_path}/{asset.filename}) to ({target_root_directory}) ...')
+            absolute_filepath = target_root_directory / str(asset.relative_path) / str(asset.filename)
+            relative_filepath = Path(str(asset.relative_path), str(asset.filename))
+
+            logger.info(f'Writing PageAsset({relative_filepath}) to ({target_root_directory}) ...')
             asset.instantiate(target_root_directory)
+            yield absolute_filepath, relative_filepath
+
+    class Meta:
+        unique_together = (
+            'site',
+            'type'
+        )
 
 
 class IndexPage(StaticPageBase):
@@ -168,7 +180,7 @@ class IndexPage(StaticPageBase):
 
             # get latest MAX_INDEX_NEWSITEMS news items
             news_context = {
-                self.newsitems_template_variablename: newspage.get_latest_n_published(n=MAX_INDEX_NEWSITEMS)
+                self.newsitems_template_variablename: newspage.get_latest_n_published(n=settings.MAX_INDEX_NEWSITEMS)
             }
         filepath = root_directory / str(self.relative_path) / str(self.filename)
         with filepath.open('w', encoding='utf8') as html_out:
@@ -176,6 +188,7 @@ class IndexPage(StaticPageBase):
             html_out.write(html)
 
     def save(self, *args, **kwargs):
+        self.filename = 'index.html'
         self.type = 'index'  # auto-populate 'type' field
         super().save(*args, **kwargs)
 
@@ -211,9 +224,16 @@ class PageAsset(UserCreatedDatetimeModel):
     # model.file_content.save(FILENAME, ContentFile(b'content'))
     file_content = models.FileField()
 
-    def instantiate(self, root_directory: Path):
-        # copy file from upload location to target path
-        # On upload, file is saved at MEDIA Bucket location, copy locally in order to instaniate for bucket sync operation
+    @property
+    def relative_filepath(self) -> Path:
+        return Path(str(self.relative_path), str(self.filename))
+
+    def instantiate(self, root_directory: Path) -> Path:
+        """
+        copy file from upload location to target path
+        On upload, file is saved at MEDIA Bucket location, copy locally in order to instaniate for bucket sync operation
+        """
         output_filepath = root_directory / str(self.relative_path) / str(self.filename)
         with output_filepath.open('wb') as output:
             output.write(self.file_content.read())
+        return output_filepath
