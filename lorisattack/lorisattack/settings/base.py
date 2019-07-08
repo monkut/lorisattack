@@ -230,8 +230,13 @@ STATIC_ROOT = '/static/'
 # --> Bucket Created in infrastructure/README.md procedure
 DEFAULT_AWS_STORAGE_BUCKET_NAME = f'lorisattack-staticfiles-dev-{S3_BUCKET_SUFFIX}'
 
+AWS_DEFAULT_ACL = None  # to silence warning
 AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME', DEFAULT_AWS_STORAGE_BUCKET_NAME)  # django-storages required setting
 S3_STATICFILES_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.{AWS_S3_DOMAIN}'
 AWS_S3_CUSTOM_DOMAIN = S3_STATICFILES_DOMAIN  # django-storages required setting
 schema = 'https://' if AWS_S3_DOMAIN == DEFAULT_AWS_S3_DOMAIN else 'http://'  # set http if using local dev
 STATIC_URL = f'{schema}{S3_STATICFILES_DOMAIN}/'
+
+MAX_INDEX_NEWSITEMS = int(os.getenv('MAX_INDEX_NEWSITEMS', '6'))
+DEFAULT_NEWS_ITEMS_PER_PAGE = '5'
+NEWS_ITEMS_PER_PAGE = int(os.getenv('NEWS_ITEMS_PER_PAGE', DEFAULT_NEWS_ITEMS_PER_PAGE))

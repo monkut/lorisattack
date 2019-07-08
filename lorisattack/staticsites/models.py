@@ -185,29 +185,30 @@ class StaticPageBase(UserCreatedDatetimeModel):
         Raises ValueError if expected assets are *NOT* registered as PageAssets
         """
         expected_assets_relative_paths = self.get_template_relpaths()
-        condition = None
-        for relative_filepath in expected_assets_relative_paths:
-            relative_path = str(relative_filepath.parent)
-            filename = relative_filepath.name
+        if expected_assets_relative_paths:
+            condition = None
+            for relative_filepath in expected_assets_relative_paths:
+                relative_path = str(relative_filepath.parent)
+                filename = relative_filepath.name
 
-            # update QuerySet with OR operation
-            if not condition:
-                condition = Q(
-                    filename=filename,
-                    relative_path=relative_path
-                )
-            else:
-                condition |= Q(
-                    filename=filename,
-                    relative_path=relative_path
-                )
-        existing_assets_qs = PageAsset.objects.filter(condition)
-        registered_assets = set(
-            Path(a.relative_path, a.filename) for a in existing_assets_qs
-        )
-        if registered_assets != set(expected_assets_relative_paths):
-            missing = set(expected_assets_relative_paths) - registered_assets
-            raise ValueError(f'PageAssets in template not registered: {missing}')
+                # update QuerySet with OR operation
+                if not condition:
+                    condition = Q(
+                        filename=filename,
+                        relative_path=relative_path
+                    )
+                else:
+                    condition |= Q(
+                        filename=filename,
+                        relative_path=relative_path
+                    )
+            existing_assets_qs = PageAsset.objects.filter(condition)
+            registered_assets = set(
+                Path(a.relative_path, a.filename) for a in existing_assets_qs
+            )
+            if registered_assets != set(expected_assets_relative_paths):
+                missing = set(expected_assets_relative_paths) - registered_assets
+                raise ValueError(f'PageAssets in template not registered: {missing}')
 
         return expected_assets_relative_paths
 
