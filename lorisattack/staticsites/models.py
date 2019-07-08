@@ -81,14 +81,19 @@ class StaticSite(UserCreatedDatetimeModel):
         else:
             bucket_name = self.staging_bucket
 
+        transferred_files = []
         try:
-            indexpage = self.get_indexpage()  # confirm that indexpage is defined (will throw DoesNotExist if not defined)
-            if indexpage:
-                site_prefix = f'site-{self.organization.pk}_'
-                with TemporaryDirectory(prefix=site_prefix) as tempdir:
-                    instantiate_staticsite(self, Path(tempdir))
-                    for item in Path(tempdir).glob('**/*'):
-                        key = str(item).replace(tempdir, '')
+            self.get_indexpage()  # confirm that indexpage is defined (will throw DoesNotExist if not defined)
+            site_prefix = f'site-{self.organization.pk}_'
+            with TemporaryDirectory(prefix=site_prefix) as tempdir:
+                tempdir_path = Path(tempdir)
+                instantiate_staticsite(self, tempdir_path)
+                for item in Path(tempdir).glob('**/*'):
+                    if item.is_file():
+                        relative_path = item.relative_to(tempdir_path)
+                        transferred_files.append(relative_path)
+
+                        key = str(relative_path)
                         logger.info(f'Uploading file ({item}) to: s3://{bucket_name}/{key}')
                         # transfer file
                         S3_CLIENT.upload_file(
@@ -98,6 +103,7 @@ class StaticSite(UserCreatedDatetimeModel):
                         )
         except IndexPage.DoesNotExist:
             raise  # adding for clarity, re-raise exception
+        return transferred_files
 
     class Meta:
         unique_together = (
@@ -306,6 +312,7 @@ class PageAsset(UserCreatedDatetimeModel):
         On upload, file is saved at MEDIA Bucket location, copy locally in order to instaniate for bucket sync operation
         """
         output_filepath = root_directory / str(self.relative_path) / str(self.filename)
+        output_filepath.parent.mkdir(exist_ok=True, parents=True)  # create relative directories
         with output_filepath.open('wb') as output:
             output.write(self.file_content.read())
         return output_filepath
