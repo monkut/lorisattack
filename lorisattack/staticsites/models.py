@@ -1,15 +1,17 @@
 import logging
 from pathlib import Path
-from typing import Generator, Tuple
+from typing import Generator, Tuple, List
 from tempfile import TemporaryDirectory
 
 from django.db import models
+from django.db.models import Q
 from django.conf import settings
 from django.template import engines
 from django.core.validators import MinLengthValidator
 from django.utils.translation import ugettext_lazy as _
 
 import boto3
+from bs4 import BeautifulSoup
 
 from accounts.models import Organization
 from commons.models import UserCreatedDatetimeModel
@@ -134,11 +136,81 @@ class StaticPageBase(UserCreatedDatetimeModel):
         help_text=_('Index template (in django template language format)')
     )
 
+    def get_template_relpaths(self) -> list:
+        """
+        Get all relative paths contained in self.template for the following elements:
+
+        - link
+        - img
+        - script
+
+        > This is used in order to determine if all necessary relative assets are registered and provided
+        """
+        relative_path_files = []
+
+        soup = BeautifulSoup(self.template, features="html.parser")
+        links = soup.find_all('link')
+        for link in links:
+            href_attr = link.attrs.get('href')
+            if href_attr and not href_attr.startswith('http'):
+                relative_path_files.append(Path(href_attr))
+
+        scripts = soup.find_all('script')
+        for script in scripts:
+            src_attr = script.attrs.get('src')
+            if src_attr and not src_attr.startswith('http'):
+                relative_path_files.append(Path(src_attr))
+
+        images = soup.find_all('img')
+        for image in images:
+            src_attr = image.attrs.get('src')
+            if src_attr and not src_attr.startswith('http'):
+                relative_path_files.append(Path(src_attr))
+
+        return relative_path_files
+
     @property
     def relative_filepath(self) -> Path:
         return Path(str(self.relative_path), str(self.filename))
 
+    def _check_for_expected_assets(self) -> List[Path]:
+        """
+        check that expected assets are registered
+        Raises ValueError if expected assets are *NOT* registered as PageAssets
+        """
+        expected_assets_relative_paths = self.get_template_relpaths()
+        condition = None
+        for relative_filepath in expected_assets_relative_paths:
+            relative_path = str(relative_filepath.parent)
+            filename = relative_filepath.name
+
+            # update QuerySet with OR operation
+            if not condition:
+                condition = Q(
+                    filename=filename,
+                    relative_path=relative_path
+                )
+            else:
+                condition |= Q(
+                    filename=filename,
+                    relative_path=relative_path
+                )
+        existing_assets_qs = PageAsset.objects.filter(condition)
+        registered_assets = set(
+            Path(a.relative_path, a.filename) for a in existing_assets_qs
+        )
+        if registered_assets != set(expected_assets_relative_paths):
+            missing = set(expected_assets_relative_paths) - registered_assets
+            raise ValueError(f'PageAssets in template not registered: {missing}')
+
+        return expected_assets_relative_paths
+
     def prepare_assets(self, target_root_directory: Path) -> Generator[Tuple[Path, Path], None, None]:
+        """
+        Instantiate registered assets to the given target_root_directory
+        """
+        self._check_for_expected_assets()
+
         for asset in PageAsset.objects.filter(page=self):
             absolute_filepath = target_root_directory / str(asset.relative_path) / str(asset.filename)
             relative_filepath = Path(str(asset.relative_path), str(asset.filename))
