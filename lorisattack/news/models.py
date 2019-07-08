@@ -1,7 +1,7 @@
 import logging
 from math import ceil
 from pathlib import Path
-from typing import Generator
+from typing import Generator, List
 
 from django.db import models
 from django.conf import settings
@@ -41,7 +41,7 @@ class NewsPage(StaticPageBase):
     def get_latest_n_published(self, n: int = 6) -> QuerySet:
         return NewsItem.objects.filter(is_published=True).order_by('-publish_on')[:n]
 
-    def instantiate(self, root_directory: Path, items_per_page: int = settings.NEWS_ITEMS_PER_PAGE) -> list:
+    def instantiate(self, root_directory: Path, items_per_page: int = settings.NEWS_ITEMS_PER_PAGE) -> List[dict]:
         """
         Create instantiated HTML and images in given root_directory
         """

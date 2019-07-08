@@ -1,10 +1,10 @@
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
 from django.test import TestCase
 from django.conf import settings
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 import boto3
 
@@ -70,11 +70,48 @@ class StaticSiteFunctionsTestCase(TestCase):
         ]
         site_prefix = 'sometestprefix-'
         with TemporaryDirectory(prefix=site_prefix) as tempdir:
+            with self.assertRaises(ValueError):
+                instantiate_staticsite(
+                    self.staticsite,
+                    Path(tempdir)
+                )
+
+            # register  assets
+            assets_directory = STATICSITES_FIXTURES_DIRECTORY / 'assets'
+            expected_assets = (
+                ('stylesheets/plugins', 'bootstrap3.min.css'),
+                ('stylesheets/plugins', 'drawer.min.css'),
+                ('stylesheets', 'style.css')
+            )
+            for relpath, filename in expected_assets:
+                local_filepath = assets_directory / filename
+                content = SimpleUploadedFile(
+                    name=filename,
+                    content=local_filepath.open('rb').read(),
+                    content_type='image/jpeg'
+                )
+                asset = PageAsset(
+                    page=self.indexpage,
+                    file_type='css',
+                    filename=filename,
+                    relative_path=relpath,
+                    file_content=content,
+                    created_by=self.system_admin_user,
+                    updated_by=self.system_admin_user
+                )
+                asset.save()
+
             instantiated_page_data = instantiate_staticsite(
                 self.staticsite,
                 Path(tempdir)
             )
             self.assertTrue(os.listdir(tempdir))
+            self.assertTrue(instantiated_page_data)
+            for page_data in instantiated_page_data:
+                print(page_data)
+                if page_data['asset_absolute_filepaths']:
+                    for asset_absolute_path in page_data['asset_absolute_filepaths']:
+                        self.assertTrue(asset_absolute_path.exists())
 
             expected_absolute_filepath = Path(tempdir) / self.indexpage.relative_filepath
             self.assertTrue(expected_absolute_filepath.exists(), f'Expected Filepath Not found: {expected_absolute_filepath}')

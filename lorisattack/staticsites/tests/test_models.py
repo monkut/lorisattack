@@ -1,5 +1,4 @@
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 from django.test import TestCase
 from django.conf import settings

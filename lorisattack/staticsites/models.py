@@ -247,7 +247,7 @@ class IndexPage(StaticPageBase):
             return True
         return False
 
-    def instantiate(self, root_directory: Path):
+    def instantiate(self, root_directory: Path) -> List[dict]:
 
         # prepare template
         django_engine = engines['django']
@@ -265,6 +265,7 @@ class IndexPage(StaticPageBase):
         with filepath.open('w', encoding='utf8') as html_out:
             html = template.render(context=news_context)
             html_out.write(html)
+        return [{'filename': self.filename}]
 
     def save(self, *args, **kwargs):
         self.filename = 'index.html'
