@@ -33,7 +33,7 @@ jobs:
             cat ./infrastructure/aws/awscli/credentials.template | envsubst > ~/.aws/credentials
             cat ./infrastructure/aws/awscli/config.template | envsubst > ~/.aws/config
             # test aws cli
-            aws sts get-caller-identity
+            #aws sts get-caller-identity
       - run:
           name: Upgrade pipenv
           command: |
