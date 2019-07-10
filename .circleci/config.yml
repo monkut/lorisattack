@@ -1,0 +1,161 @@
+version: 2
+
+jobs:
+  build:
+    working_directory: ~/lorisattack/
+    docker:
+      - image: circleci/python:3.7.3
+        environment:
+          PIPENV_VENV_IN_PROJECT: true
+          DJANGO_SETTINGS_MODULE: lorisattack.settings.circleci
+      - image: mysql:8
+        environment:
+          MYSQL_ROOT_PASSWORD: mysecretpassword
+          MYSQL_DATABASE: circleci_test
+      - image: localstack/localstack:0.8.10
+    steps:
+      - checkout
+      - run: sudo chown -R circleci:circleci /usr/local/bin
+      - run: sudo chown -R circleci:circleci /usr/local/lib/python3.7/site-packages
+      - restore_cache:
+          key: deps-v2-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
+      - run:
+          name: prepare boto3 credentials and awscli
+          command: |
+            # install envsubst (provided by gettext-base)
+            sudo apt install gettext-base
+
+            # for deployment
+            pip install awscli
+
+            # prepare credentials
+            mkdir -p ~/.aws
+            cat ./infrastructure/aws/awscli/credentials.template | envsubst > ~/.aws/credentials
+            cat ./infrastructure/aws/awscli/config.template | envsubst > ~/.aws/config
+            # test aws cli
+            aws sts get-caller-identity
+      - run:
+          name: Upgrade pipenv
+          command: |
+            pip install pipenv -U
+      - run:
+          name: install dependencies
+          command: |
+            pipenv sync --dev
+      - save_cache:
+          key: deps-v2-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
+          paths:
+            - "/home/circleci/.aws"
+            - "/home/circlci/.local"
+            - "/usr/local/bin"
+            - "/usr/local/lib/python3.7/site-packages"
+      - run:
+          name: prepare database
+          command: |
+            cd lorisattack
+            pipenv run python manage.py makemigrations
+            pipenv run python manage.py migrate
+      - run:
+          name: run tests
+          command: |
+            make test
+      - store_test_results:
+          path: test-results
+      - store_artifacts:
+          path: test-results
+          destination: tr1
+      - run:
+          name: code checks (flake8)
+          command: |
+            make flake8
+
+  deploy:
+      docker:
+          - image: circleci/python:3.7.5
+      steps:
+        - checkout
+        - run: sudo chown -R circleci:circleci /usr/local/bin
+        - run: sudo chown -R circleci:circleci /usr/local/lib/python3.7/site-packages
+        - restore_cache:
+            key: deps-v4-{{ .Branch }}-deploy-{{ checksum "Pipfile.lock" }}
+        - run:
+            name: prepare boto3 credentials and awscli
+            command: |
+              # install envsubst (provided by gettext-base)
+              sudo apt install gettext-base
+
+              # for deployment
+              pip install awscli
+
+              # prepare credentials
+              mkdir -p ~/.aws
+              cat ./infrastructure/aws/awscli/credentials.template | envsubst > ~/.aws/credentials
+              cat ./infrastructure/aws/awscli/config.template | envsubst > ~/.aws/config
+              # test aws cli
+              aws sts get-caller-identity
+        - run:
+            name: Upgrade pipenv & zappa settings generator
+            command: |
+              pip install pipenv -U
+              pip install boto3
+        - run:
+            name: install locked dependencies
+            command: |
+              # Project Packages
+              pipenv sync
+        - save_cache:
+            key: deps-v4-{{ .Branch }}-deploy-{{ checksum "Pipfile.lock" }}
+            paths:
+              - "/home/circleci/.aws"
+              - "/home/circleci/.profile"
+              - "/home/circleci/.local/"
+              - "/usr/local/bin"
+              - "/usr/local/lib/python3.7/site-packages"
+        - run:
+            name: prepare zappa_settings
+            command: |
+              pip install git+https://github.com/monkut/zappa-configuration-generator
+              python3.7 -m gappa.settings.generate --stack-name rdcs-dev --stage dev --zappa-parameters project_name=rdcs django_settings=lorisattack.settings.production s3_bucket=rdcs-zappa-vihv4zoh0 timeout_seconds=900 --events=./events.json > ./lorisattack/zappa_settings.json
+              cat ./lorisattack/zappa_settings.json
+        - run:
+            name: run zappa update
+            command: |
+              cd lorisattack
+              pipenv run zappa update dev
+              pipenv run zappa manage dev migrate
+
+  run-external-api-test:
+    docker:
+      - image: circleci/python:3.7.5
+    steps:
+      - checkout
+      - run:
+          name: waiting for deploy
+          command: sleep 10
+      - run:
+          name: run external test
+          command: |
+            curl -u ${CIRCLE_API_USER_TOKEN}: \
+            -d "build_parameters[CIRCLE_JOB]=build" \
+            https://circleci.com/api/v1.1/project/github/livepassjp/rcs-external-api-tester/tree/master
+
+
+workflows:
+  version: 2
+  test-deploy:
+    jobs:
+      - build
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only:
+                - master
+      - run-external-api-test:
+          requires:
+            - build
+            - deploy
+          filters:
+            branches:
+              only: master

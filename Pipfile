@@ -5,6 +5,10 @@ verify_ssl = true
 
 [dev-packages]
 mycli = "*"
+flake8 = "*"
+coverage = "*"
+pydocstyle = "*"
+mypy = "*"
 
 [packages]
 django = "*"
