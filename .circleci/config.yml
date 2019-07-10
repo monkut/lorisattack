@@ -5,6 +5,8 @@ jobs:
     working_directory: ~/lorisattack/
     docker:
       - image: circleci/python:3.7.3
+        # command introduced to resolve "Authentication plugin 'caching_sha2_password' cannot be loaded" issue
+        command: [--default-authentication-plugin=mysql_native_password]
         environment:
           PIPENV_VENV_IN_PROJECT: true
           DJANGO_SETTINGS_MODULE: lorisattack.settings.circleci
@@ -53,7 +55,6 @@ jobs:
           name: prepare database
           command: |
             cd lorisattack
-            pipenv run python manage.py makemigrations
             pipenv run python manage.py migrate
       - run:
           name: run tests
