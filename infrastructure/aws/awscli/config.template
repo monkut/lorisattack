@@ -1,0 +1,8 @@
+[default]
+region = ${AWS_DEFAULT_REGION}
+output = json
+
+[profile circleci]
+role_arn = ${AWS_ACCESS_ROLE_ARN}
+region = ${AWS_DEFAULT_REGION}
+source_profile = default
